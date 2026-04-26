@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Sidebar from '../components/Sidebar';
 import BiasScoreRing from '../components/BiasScoreRing';
 import FeatureWeightBar from '../components/FeatureWeightBar';
-import { analyzeLayoffRisk } from '../services/geminiservice';
+import { analyzeLayoffRisk, buildFallbackLayoffResult } from '../services/geminiservice';
 
 const DEMO_EMPLOYEE_DATA = `Employee: Meera Nair
 Age: 47
@@ -15,23 +15,11 @@ Productivity score: 68
 Critical system ownership: Payments regression suite
 Manager feedback: Reliable, high domain knowledge, slower sprint velocity after team restructuring`;
 
-const fallbackResult = {
-  layoff_bias_score: 72,
-  highest_risk_group: 'Experienced employees over 45 with high compensation',
-  proxy_metrics: [
-    { metric: 'Compensation band', risk: 78, why: 'High salary is being used as a cost proxy instead of role necessity.' },
-    { metric: 'Recent leave', risk: 64, why: 'Leave history can penalize caregivers, health needs, or parental leave.' },
-    { metric: 'Tenure', risk: 59, why: 'Long-tenured employees are clustered into higher layoff scores.' }
-  ],
-  counterfactual: 'If age and salary-band proxies are neutralized, the employee moves from high risk to medium risk.',
-  recommendation: 'Re-run layoff scoring with role-critical skills, documented performance, and team dependency weighted above cost proxies.'
-};
-
 const LayoffAuditScreen = () => {
   const [employeeData, setEmployeeData] = useState(DEMO_EMPLOYEE_DATA);
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
-  const activeResult = result || fallbackResult;
+  const activeResult = result || buildFallbackLayoffResult(employeeData);
 
   const runAudit = async () => {
     setLoading(true);
@@ -69,7 +57,10 @@ const LayoffAuditScreen = () => {
             <div style={{ color: '#FFFFFF', fontSize: 14, fontWeight: 600, marginBottom: 12 }}>Employee Decision Inputs</div>
             <textarea
               value={employeeData}
-              onChange={(e) => setEmployeeData(e.target.value)}
+              onChange={(e) => {
+                setEmployeeData(e.target.value);
+                setResult(null);
+              }}
               style={{
                 width: '100%', minHeight: 330, resize: 'vertical', background: '#0A0A0F',
                 border: '1px solid #1F2937', borderRadius: 8, padding: 14,

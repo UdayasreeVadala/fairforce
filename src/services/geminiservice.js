@@ -120,6 +120,78 @@ const buildFallbackBiasResult = (resumeText) => {
   };
 };
 
+const clampScore = (score) => Math.max(8, Math.min(95, Math.round(score)));
+
+export const buildFallbackLayoffResult = (employeeData) => {
+  const text = employeeData.toLowerCase();
+  const age = Number(text.match(/age[:\s-]*(\d+)/i)?.[1] || 0);
+  const tenure = Number(text.match(/tenure[:\s-]*(\d+(?:\.\d+)?)/i)?.[1] || 0);
+  const leaveDays = Number(text.match(/(?:leave|absence)[:\s-]*(\d+)/i)?.[1] || 0);
+  const productivity = Number(text.match(/productivity(?:\s+score)?[:\s-]*(\d+)/i)?.[1] || 70);
+  const isHighComp = /compensation band:\s*high|salary:\s*high|high compensation|high salary/i.test(employeeData);
+  const isMediumComp = /compensation band:\s*medium|salary:\s*medium|medium compensation|medium salary/i.test(employeeData);
+  const strongPerformance = /exceeds|excellent|strong|high performer|critical|reliable/i.test(employeeData);
+  const weakPerformance = /poor|low performer|needs improvement|below expectations/i.test(employeeData);
+
+  const compensationRisk = isHighComp ? 78 : isMediumComp ? 52 : 26;
+  const ageRisk = age >= 46 ? 76 : age >= 36 ? 48 : 24;
+  const tenureRisk = tenure >= 10 ? 70 : tenure >= 5 ? 50 : 25;
+  const leaveRisk = leaveDays >= 30 ? 68 : leaveDays >= 10 ? 45 : 18;
+  const productivityRisk = productivity < 50 ? 62 : productivity < 70 ? 42 : 20;
+
+  let score =
+    compensationRisk * 0.24 +
+    ageRisk * 0.22 +
+    tenureRisk * 0.20 +
+    leaveRisk * 0.18 +
+    productivityRisk * 0.16;
+
+  if (strongPerformance) score -= 8;
+  if (weakPerformance) score += 10;
+
+  const layoffScore = clampScore(score);
+  const proxyMetrics = [
+    {
+      metric: 'Compensation band',
+      risk: compensationRisk,
+      why: isHighComp
+        ? 'High compensation can become a cost-cutting proxy instead of measuring role necessity.'
+        : 'Compensation is not the dominant risk factor in this profile.'
+    },
+    {
+      metric: 'Age band',
+      risk: ageRisk,
+      why: age >= 46
+        ? 'Age may be indirectly influencing layoff risk through seniority and compensation.'
+        : 'Age proxy risk is lower for this profile.'
+    },
+    {
+      metric: 'Tenure',
+      risk: tenureRisk,
+      why: tenure >= 10
+        ? 'Long tenure is clustered with higher cost and may be penalized by productivity scoring.'
+        : 'Tenure is not strongly penalized for this profile.'
+    },
+    {
+      metric: 'Recent leave',
+      risk: leaveRisk,
+      why: leaveDays >= 30
+        ? 'Recent leave can unfairly penalize caregivers, health needs, or parental leave.'
+        : 'Leave history does not appear to be a major proxy risk.'
+    }
+  ];
+
+  const highestRisk = proxyMetrics.reduce((max, metric) => metric.risk > max.risk ? metric : max, proxyMetrics[0]);
+
+  return {
+    layoff_bias_score: layoffScore,
+    highest_risk_group: `${highestRisk.metric} is the strongest proxy risk in this profile`,
+    proxy_metrics: proxyMetrics,
+    counterfactual: `If ${highestRisk.metric.toLowerCase()} is neutralized, the estimated layoff bias score drops from ${layoffScore}% to ${clampScore(layoffScore - 18)}%.`,
+    recommendation: 'Re-run layoff scoring with documented performance, role-critical skills, team dependency, and project ownership weighted above cost or demographic proxies.'
+  };
+};
+
 export const analyzeBias = async (resumeText, jobDescription) => {
   const prompt = `You are an AI bias detection expert specializing in Indian corporate hiring discrimination. Analyze this resume against the job description for proxy discrimination.
 
@@ -233,16 +305,6 @@ Return ONLY valid JSON:
     return await callGemini(prompt);
   } catch (error) {
     console.warn('Using demo layoff audit:', error);
-    return {
-      layoff_bias_score: 72,
-      highest_risk_group: 'Experienced employees over 45 with high compensation',
-      proxy_metrics: [
-        { metric: 'Compensation band', risk: 78, why: 'High salary is being used as a cost proxy instead of role necessity.' },
-        { metric: 'Recent leave', risk: 64, why: 'Leave history can penalize caregivers, health needs, or parental leave.' },
-        { metric: 'Tenure', risk: 59, why: 'Long-tenured employees are clustered into higher layoff scores.' }
-      ],
-      counterfactual: 'If age and salary-band proxies are neutralized, the employee moves from high risk to medium risk.',
-      recommendation: 'Re-run layoff scoring with role-critical skills, documented performance, and team dependency weighted above cost proxies.'
-    };
+    return buildFallbackLayoffResult(employeeData);
   }
 };
