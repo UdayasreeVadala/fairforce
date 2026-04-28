@@ -1,18 +1,24 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { signInWithGoogle } from '../firebase';
 
 const LoginScreen = () => {
   const navigate = useNavigate();
+  const [authError, setAuthError] = useState('');
+  const [signingIn, setSigningIn] = useState(false);
 
   const handleGoogleSignIn = async () => {
+    setAuthError('');
+    setSigningIn(true);
     try {
-      await signInWithGoogle();
-    } catch (error) {
-      console.warn('Google sign-in skipped:', error);
-    } finally {
+      const result = await signInWithGoogle();
+      localStorage.setItem('ff_user_email', result.user.email || '');
       navigate('/upload');
+    } catch (error) {
+      console.warn('Google sign-in failed:', error);
+      setAuthError(error.message || 'Google sign-in failed. Check Firebase configuration.');
     }
+    setSigningIn(false);
   };
 
   return (
@@ -58,17 +64,18 @@ const LoginScreen = () => {
           <div style={{ display: 'flex', gap: 12 }}>
             <button
               onClick={handleGoogleSignIn}
+              disabled={signingIn}
               style={{
                 display: 'flex', alignItems: 'center', gap: 10,
-                background: '#FFFFFF', color: '#0A0A0F', border: 'none',
+                background: signingIn ? '#9CA3AF' : '#FFFFFF', color: '#0A0A0F', border: 'none',
                 padding: '12px 24px', borderRadius: 8, fontSize: 14, fontWeight: 600,
-                cursor: 'pointer'
+                cursor: signingIn ? 'not-allowed' : 'pointer'
               }}
             >
               <svg width="18" height="18" viewBox="0 0 48 48">
                 <path fill="#4285F4" d="M44.5 20H24v8.5h11.8C34.7 33.9 30.1 37 24 37c-7.2 0-13-5.8-13-13s5.8-13 13-13c3.1 0 5.9 1.1 8.1 2.9l6.4-6.4C34.6 4.1 29.6 2 24 2 11.8 2 2 11.8 2 24s9.8 22 22 22c11 0 21-8 21-22 0-1.3-.2-2.7-.5-4z"/>
               </svg>
-              Continue with Google
+              {signingIn ? 'Signing in...' : 'Continue with Google'}
             </button>
             <button
               onClick={() => navigate('/upload')}
@@ -81,6 +88,11 @@ const LoginScreen = () => {
               View Demo
             </button>
           </div>
+          {authError && (
+            <div style={{ marginTop: 14, color: '#FCA5A5', fontSize: 12, lineHeight: 1.5, maxWidth: 520 }}>
+              {authError}
+            </div>
+          )}
           <div style={{ marginTop: 48 }}>
             <div style={{ display: 'flex', gap: 32 }}>
               {[
