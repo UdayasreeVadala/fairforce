@@ -27,7 +27,7 @@ const LayoffAuditScreen = () => {
     const audit = await analyzeLayoffRisk(employeeData);
     setResult(audit);
     localStorage.setItem('ff_layoff_result', JSON.stringify(audit));
-    await saveAuditResult({
+    saveAuditResult({
       auditMoment: 'getting_out',
       auditType: 'layoff_scoring',
       employeeData,
@@ -36,7 +36,7 @@ const LayoffAuditScreen = () => {
       proxyMetrics: audit.proxy_metrics,
       counterfactual: audit.counterfactual,
       recommendation: audit.recommendation,
-    });
+    }).catch((saveError) => console.warn('Layoff audit save skipped:', saveError));
     setLoading(false);
   };
 

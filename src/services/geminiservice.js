@@ -1,5 +1,6 @@
 const API_KEY = process.env.REACT_APP_GEMINI_API_KEY;
 const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent';
+const GEMINI_TIMEOUT_MS = 8000;
 
 const DEMO_BIAS_RESULT = {
   bias_score: 67,
@@ -45,14 +46,18 @@ const callGemini = async (prompt) => {
     throw new Error('Missing REACT_APP_GEMINI_API_KEY');
   }
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
+
   const response = await fetch(`${BASE_URL}?key=${API_KEY}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    signal: controller.signal,
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: { temperature: 0.1 }
     })
-  });
+  }).finally(() => clearTimeout(timeoutId));
 
   if (!response.ok) {
     throw new Error(`Gemini request failed: ${response.status}`);

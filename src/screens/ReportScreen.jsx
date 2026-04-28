@@ -32,7 +32,7 @@ const ReportScreen = () => {
         const resumeText = localStorage.getItem('ff_resume_text') || 'Sample resume';
         const r = await generateFairnessReport(biasResult, resumeText);
         setReport(r);
-        await saveFairnessReport({
+        saveFairnessReport({
           auditType: 'resume_screening',
           candidateName: biasResult.candidate_name || 'Candidate',
           collegeName: biasResult.college_name || 'College not detected',
@@ -41,7 +41,7 @@ const ReportScreen = () => {
           recommendations: r.remediation_steps || [],
           complianceRisk: r.compliance_risk,
           dpdpComplianceScore: r.dpdp_compliance_score,
-        });
+        }).catch((saveError) => console.warn('Report save skipped:', saveError));
       } catch (e) {
         setReport(DEMO_REPORT);
       } finally {

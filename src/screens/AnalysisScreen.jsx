@@ -27,7 +27,7 @@ const AnalysisScreen = () => {
         setCounterfactual(cf);
         localStorage.setItem('ff_bias_result', JSON.stringify(biasResult));
         localStorage.setItem('ff_resume_text', resumeText);
-        await saveAuditResult({
+        saveAuditResult({
           auditMoment: 'getting_in',
           auditType: 'resume_screening',
           candidateName: biasResult.candidate_name || 'Candidate',
@@ -39,7 +39,7 @@ const AnalysisScreen = () => {
           rootCause: biasResult.root_cause,
           summary: biasResult.summary_insight,
           counterfactual: cf,
-        });
+        }).catch((saveError) => console.warn('Audit save skipped:', saveError));
       } catch (e) {
         setError('Analysis failed. Please check your API key and try again.');
       } finally {
