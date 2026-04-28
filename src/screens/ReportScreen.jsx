@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import { generateFairnessReport } from '../services/geminiservice';
+import { saveFairnessReport } from '../services/firebaseAuditService';
 
 const ReportScreen = () => {
   const navigate = useNavigate();
@@ -31,6 +32,16 @@ const ReportScreen = () => {
         const resumeText = localStorage.getItem('ff_resume_text') || 'Sample resume';
         const r = await generateFairnessReport(biasResult, resumeText);
         setReport(r);
+        await saveFairnessReport({
+          auditType: 'resume_screening',
+          candidateName: biasResult.candidate_name || 'Candidate',
+          collegeName: biasResult.college_name || 'College not detected',
+          biasScore: biasResult.bias_score,
+          summary: r.executive_summary,
+          recommendations: r.remediation_steps || [],
+          complianceRisk: r.compliance_risk,
+          dpdpComplianceScore: r.dpdp_compliance_score,
+        });
       } catch (e) {
         setReport(DEMO_REPORT);
       } finally {

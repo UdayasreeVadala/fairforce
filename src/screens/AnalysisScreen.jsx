@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Sidebar from '../components/Sidebar';
 import CounterfactualCard from '../components/CounterfactualCard';
 import { analyzeBias, runCounterfactual } from '../services/geminiservice';
+import { saveAuditResult } from '../services/firebaseAuditService';
 
 const AnalysisScreen = () => {
   const navigate = useNavigate();
@@ -26,6 +27,19 @@ const AnalysisScreen = () => {
         setCounterfactual(cf);
         localStorage.setItem('ff_bias_result', JSON.stringify(biasResult));
         localStorage.setItem('ff_resume_text', resumeText);
+        await saveAuditResult({
+          auditMoment: 'getting_in',
+          auditType: 'resume_screening',
+          candidateName: biasResult.candidate_name || 'Candidate',
+          collegeName: biasResult.college_name || 'College not detected',
+          experience: biasResult.experience || 'Experience not detected',
+          biasScore: biasResult.bias_score,
+          biasLevel: biasResult.bias_level,
+          featureWeights: biasResult.feature_weights,
+          rootCause: biasResult.root_cause,
+          summary: biasResult.summary_insight,
+          counterfactual: cf,
+        });
       } catch (e) {
         setError('Analysis failed. Please check your API key and try again.');
       } finally {

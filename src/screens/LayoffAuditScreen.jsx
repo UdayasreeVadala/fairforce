@@ -3,6 +3,7 @@ import Sidebar from '../components/Sidebar';
 import BiasScoreRing from '../components/BiasScoreRing';
 import FeatureWeightBar from '../components/FeatureWeightBar';
 import { analyzeLayoffRisk, buildFallbackLayoffResult } from '../services/geminiservice';
+import { saveAuditResult } from '../services/firebaseAuditService';
 
 const DEMO_EMPLOYEE_DATA = `Employee: Meera Nair
 Age: 47
@@ -26,6 +27,16 @@ const LayoffAuditScreen = () => {
     const audit = await analyzeLayoffRisk(employeeData);
     setResult(audit);
     localStorage.setItem('ff_layoff_result', JSON.stringify(audit));
+    await saveAuditResult({
+      auditMoment: 'getting_out',
+      auditType: 'layoff_scoring',
+      employeeData,
+      biasScore: audit.layoff_bias_score,
+      highestRiskGroup: audit.highest_risk_group,
+      proxyMetrics: audit.proxy_metrics,
+      counterfactual: audit.counterfactual,
+      recommendation: audit.recommendation,
+    });
     setLoading(false);
   };
 

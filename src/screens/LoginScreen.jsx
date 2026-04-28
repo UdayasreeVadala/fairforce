@@ -1,8 +1,19 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { signInWithGoogle } from '../firebase';
 
 const LoginScreen = () => {
   const navigate = useNavigate();
+
+  const handleGoogleSignIn = async () => {
+    try {
+      await signInWithGoogle();
+    } catch (error) {
+      console.warn('Google sign-in skipped:', error);
+    } finally {
+      navigate('/upload');
+    }
+  };
 
   return (
     <div style={{
@@ -46,7 +57,7 @@ const LoginScreen = () => {
           </p>
           <div style={{ display: 'flex', gap: 12 }}>
             <button
-              onClick={() => navigate('/dashboard')}
+              onClick={handleGoogleSignIn}
               style={{
                 display: 'flex', alignItems: 'center', gap: 10,
                 background: '#FFFFFF', color: '#0A0A0F', border: 'none',
