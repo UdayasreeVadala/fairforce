@@ -115,13 +115,81 @@ const extractResumeProfile = (resumeText) => {
   };
 };
 
-const buildFallbackBiasResult = (resumeText) => {
+const detectCollegeRisk = (collegeName, resumeText) => {
+  const text = `${collegeName} ${resumeText}`.toLowerCase();
+  if (/(iit|indian institute of technology|iisc|bits pilani|iiit hyderabad)/i.test(text)) return 10;
+  if (/(nit|iiit|vellore institute|vit|manipal|anna university|jadavpur)/i.test(text)) return 24;
+  if (/(government|state university|osmania|jntu|andhra university|mumbai university|delhi university)/i.test(text)) return 42;
+  if (/(college|institute|technology|engineering)/i.test(text)) return 58;
+  return 46;
+};
+
+const countSkillMatches = (resumeText, jobDescription) => {
+  const skillTerms = [
+    'python', 'java', 'javascript', 'react', 'node', 'sql', 'aws', 'docker',
+    'machine learning', 'ai', 'nlp', 'computer vision', 'fastapi', 'firebase',
+    'data', 'cloud', 'microservices', 'api', 'html', 'css'
+  ];
+  const resume = resumeText.toLowerCase();
+  const jd = jobDescription.toLowerCase();
+  const required = skillTerms.filter((skill) => jd.includes(skill));
+  const matched = required.filter((skill) => resume.includes(skill));
+  return {
+    requiredCount: required.length,
+    matchedCount: matched.length,
+    matchRatio: required.length ? matched.length / required.length : 0.65
+  };
+};
+
+const detectExperienceYears = (text) => {
+  const compact = text.toLowerCase();
+  const match =
+    compact.match(/(\d+(?:\.\d+)?)\+?\s*(?:years|yrs|year)\s+(?:of\s+)?experience/) ||
+    compact.match(/experience[:\s-]*(\d+(?:\.\d+)?)\+?\s*(?:years|yrs|year)/);
+  if (match) return Number(match[1]);
+  if (/(intern|internship)/i.test(text)) return 0.5;
+  return 1;
+};
+
+const getBiasLevel = (score) => {
+  if (score >= 75) return 'Critical';
+  if (score >= 60) return 'High';
+  if (score >= 35) return 'Medium';
+  return 'Low';
+};
+
+const buildFallbackBiasResult = (resumeText, jobDescription = '') => {
   const profile = extractResumeProfile(resumeText);
+  const collegeRisk = detectCollegeRisk(profile.college_name, resumeText);
+  const skillMatch = countSkillMatches(resumeText, jobDescription);
+  const resumeExperience = detectExperienceYears(resumeText);
+  const jdExperience = detectExperienceYears(jobDescription);
+  const experienceGap = Math.max(0, jdExperience - resumeExperience);
+  const firstGenRisk = /(first-generation|first generation|lateral entry|diploma|rural|vernacular|regional)/i.test(resumeText) ? 14 : 0;
+  const locationRisk = /(bangalore|bengaluru|delhi|mumbai|pune|hyderabad)/i.test(jobDescription) &&
+    !new RegExp(jobDescription.match(/(bangalore|bengaluru|delhi|mumbai|pune|hyderabad)/i)?.[1] || '$^', 'i').test(resumeText)
+    ? 10
+    : 2;
+  const skillProtection = Math.round(skillMatch.matchRatio * 24);
+  const experienceRisk = Math.min(18, Math.round(experienceGap * 6));
+  const score = clampScore(22 + collegeRisk * 0.52 + firstGenRisk + locationRisk + experienceRisk - skillProtection);
+  const featureWeights = {
+    skills_competencies: Math.max(18, Math.round(48 * skillMatch.matchRatio)),
+    college_tier: Math.min(65, Math.round(collegeRisk * 0.75)),
+    location_density: locationRisk,
+    experience_years: Math.max(5, experienceRisk)
+  };
+  const biasLevel = getBiasLevel(score);
+
   return {
     ...DEMO_BIAS_RESULT,
     ...profile,
+    bias_score: score,
+    bias_level: biasLevel,
+    feature_weights: featureWeights,
+    fairness_violation: score >= 55,
     root_cause: `${profile.college_name} may be treated as an institution-prestige proxy instead of evaluating skills independently.`,
-    summary_insight: `FairForce analyzed ${profile.candidate_name}'s uploaded resume. The audit flags possible proxy bias through college and location signals while preserving the candidate's skill evidence.`
+    summary_insight: `FairForce analyzed ${profile.candidate_name}'s uploaded resume. Skills matched ${skillMatch.matchedCount}/${skillMatch.requiredCount || 'available'} detected JD signals, producing a ${biasLevel.toLowerCase()} proxy-bias risk score.`
   };
 };
 
@@ -228,7 +296,7 @@ Return ONLY a valid JSON object, no markdown, no explanation:
     return await callGemini(prompt);
   } catch (error) {
     console.warn('Using demo bias result:', error);
-    return buildFallbackBiasResult(resumeText);
+    return buildFallbackBiasResult(resumeText, jobDescription);
   }
 };
 
@@ -250,8 +318,13 @@ Return ONLY valid JSON:
     return await callGemini(prompt);
   } catch (error) {
     console.warn('Using demo counterfactual:', error);
+    const original = buildFallbackBiasResult(resumeText, '').bias_score;
+    const prestigeImprovement = /(iit|ivy|bombay|stanford|mit|harvard)/i.test(newValue) ? 28 : 14;
+    const newScore = clampScore(original - prestigeImprovement);
     return {
-      ...DEMO_COUNTERFACTUAL,
+      original_score: original,
+      new_score: newScore,
+      score_delta: original - newScore,
       interpretation: `Same profile, changed ${changedFeature} from ${originalValue} to ${newValue}. ${DEMO_COUNTERFACTUAL.interpretation}`
     };
   }
